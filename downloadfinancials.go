@@ -7,7 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
-"github.com/rs/xid"
+	"github.com/rs/xid"
+	"flag"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
@@ -49,8 +50,9 @@ func GetValues(doc *goquery.Document) (values map[string]string) {
 
 type FinancialSummary struct {
 	gorm.Model
-	Symbol          string `gorm:"primary_key"`
-	CreatedTime     *time.Time `gorm:"primary_key"`
+	UniqueId string `gorm:"primary_key"`
+	Symbol          string 
+	CreatedTime     *time.Time
 	CompanyName     string
 	CashToDebt      float64 `gorm:"not null;type:decimal(10,2)"`
 	AltmanZScore    float64 `gorm:"not null;type:decimal(10,2)"`
@@ -64,12 +66,7 @@ type FinancialSummary struct {
 	Industry        string
 }
 
-// func GetValuesFinancialSummary(doc *goquery.Document) *FinancialSummary {
-// 	v := GetValues(doc)
-// 	//fs := FinancialSummary { symbol: }
-// }
-
-func ScrapeFinancialData(createdTime *time.Time, symbol string) *FinancialSummary {
+func ScrapeFinancialData(uniqueID string, createdTime *time.Time, symbol string) *FinancialSummary {
 	// Request the HTML page.
 	res, err := http.Get("https://www.gurufocus.com/stock/" + symbol + "/summary")
 	if err != nil {
@@ -93,6 +90,7 @@ func ScrapeFinancialData(createdTime *time.Time, symbol string) *FinancialSummar
 		return v
 	}
 	return &FinancialSummary{
+		UniqueId: uniqueID,
 		CreatedTime:     createdTime,
 		Symbol:          symbol,
 		CompanyName:     financialData["Company Name"],
@@ -109,12 +107,6 @@ func ScrapeFinancialData(createdTime *time.Time, symbol string) *FinancialSummar
 	}
 }
 
-type Animal struct {
-	ID   int64
-	Name string `gorm:"default:'galeone'"`
-	Age  float64
-}
-
 func main() {
 	db, err := gorm.Open("sqlite3", "financial_data.db")
 	if err != nil {
@@ -123,14 +115,20 @@ func main() {
 	defer db.Close()
 	// Migrate the schema
 	db.AutoMigrate(&FinancialSummary{})
-	//db.AutoMigrate(&Animal{})
-
 
 	now := time.Now()
-	financialDataSummary := ScrapeFinancialData(&now, "INTC")
-	fmt.Println(financialDataSummary)
-	//db.CreateTable(&financialDataSummary)
-	db.Create(financialDataSummary)
-	//db.Create(&FinancialSummary{symbol: "INTC"})
-	//db.Create(&Animal{Name: "Giraffe", Age: 42})
+	guid := xid.New()
+
+	boolPtr := flag.Bool("save", true, "save to database")
+	flag.Parse()
+	for _, symbol := range flag.Args() {
+		financialDataSummary := ScrapeFinancialData(guid.String(), &now, symbol)
+		if *boolPtr {
+			db.Create(financialDataSummary)
+		} else {
+			fmt.Println(financialDataSummary)
+		}
+	}
+
+
 }
