@@ -24,6 +24,7 @@ func FieldToQueryMap() (queryMap map[string]string) {
 	queryMap["Forward PE Ratio"] = "#ratios > div > table.stock-indicator-table > tbody > tr:nth-child(2) > td:nth-child(2)"
 	queryMap["PEG Ratio"] = "#ratios > div > table.stock-indicator-table > tbody > tr:nth-child(12) > td:nth-child(2)"
 	queryMap["PB Ratio"] = "#ratios > div > table.stock-indicator-table > tbody > tr:nth-child(5) > td:nth-child(2)"
+	queryMap["Market Cap"] = "#components-root > div > div.responsive-section > div:nth-child(1) > div > div.summary-section.summary-section-sm > div > div.stock-summary-table.fc-regular > div:nth-child(6)"
 	queryMap["Company Name"] = ".fs-x-large"
 	queryMap["Current Stock Price"] = ".fs-x-large"
 	queryMap["Industry"] = "#business-description > div > div:nth-child(2) > a:nth-child(3)"
@@ -42,7 +43,7 @@ func GetValues(doc *goquery.Document) (values map[string]string) {
 			fieldValue = strings.TrimSpace(strings.Split(fieldValue, "$")[1])
 			fieldValue = strings.TrimSpace(strings.Split(fieldValue, " ")[0])
 		}
-		fmt.Printf("Name [%s] Value [%s]\n", key, fieldValue)
+		log.Printf("Name [%s] Value [%s]\n", key, fieldValue)
 		values[key] = fieldValue
 	}
 	return
