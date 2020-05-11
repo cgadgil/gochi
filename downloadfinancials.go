@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/jinzhu/gorm"
+	_ "github.com/jinzhu/gorm/dialects/sqlite"
 )
 
 func FieldToQueryMap() (queryMap map[string]string) {
@@ -45,8 +47,9 @@ func GetValues(doc *goquery.Document) (values map[string]string) {
 }
 
 type FinancialSummary struct {
-	createdTime     *time.Time `gorm:"primary_key"`
-	symbol          string     `gorm:"primary_key"`
+	gorm.Model
+	//createdTime     *time.Time `gorm:"primary_key"`
+	symbol          string `gorm:"primary_key"`
 	companyName     string
 	cashToDebt      float64
 	altmanZScore    float64
@@ -88,7 +91,7 @@ func ScrapeFinancialData(createdTime *time.Time, symbol string) *FinancialSummar
 		return v
 	}
 	return &FinancialSummary{
-		createdTime:     createdTime,
+		//createdTime:     createdTime,
 		symbol:          symbol,
 		companyName:     financialData["Company Name"],
 		cashToDebt:      myParseFloat(financialData["Cash-To-Debt"]),
@@ -103,8 +106,24 @@ func ScrapeFinancialData(createdTime *time.Time, symbol string) *FinancialSummar
 	}
 }
 
+type Animal struct {
+	ID   int64
+	Name string `gorm:"default:'galeone'"`
+	Age  int64
+}
+
 func main() {
-	//db, err := gorm.Open("sqlite3", "financial_data.db")
+	db, err := gorm.Open("sqlite3", "financial_data.db")
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+	// Migrate the schema
+
 	now := time.Now()
-	ScrapeFinancialData(&now, "INTC")
+	financialDataSummary := ScrapeFinancialData(&now, "INTC")
+	db.AutoMigrate(financialDataSummary)
+	fmt.Println(financialDataSummary)
+	//db.CreateTable(&financialDataSummary)
+	db.Create(financialDataSummary)
 }
