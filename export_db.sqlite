@@ -1,5 +1,7 @@
+/*CREATE TABLE IF NOT EXISTS "financial_summaries" ("id" integer primary key autoincrement,"created_at" datetime,"updated_at" datetime,"deleted_at" datetime,"unique_id" varchar(255),"symbol" varchar(255),"created_time" datetime,"company_name" varchar(255),"cash_to_debt" decimal(10,2) NOT NULL,"altman_z_score" decimal(10,2) NOT NULL,"operating_margin" decimal(10,2) NOT NULL,"net_margin" decimal(10,2) NOT NULL,"pe_ratio" decimal(10,2) NOT NULL,"forward_pe_ratio" decimal(10,2) NOT NULL,"peg_ratio" decimal(10,2) NOT NULL,"pb_ratio" decimal(10,2) NOT NULL,"stock_price" decimal(10,2) NOT NULL,"industry" varchar(255) );
+*/
 .separator "|"
 .headers on
 .output sp500.csv
-select * from financial_summaries;
+select created_at, unique_id, symbol, company_name, cash_to_debt, altman_z_score, operating_margin, net_margin, pe_ratio, forward_pe_ratio, peg_ratio, pb_ratio, stock_price, altman_z_score/pe_ratio as ztp, altman_z_score/peg_ratio as ztpeg, (altman_z_score/pe_ratio+altman_z_score/peg_ratio)/2 as cg_score from financial_summaries;
 .quit
