@@ -1,0 +1,5 @@
+.separator "|"
+.headers on
+.output sp500.csv
+select * from financial_summaries;
+.quit
