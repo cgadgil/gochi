@@ -9,6 +9,7 @@ import (
 	"time"
 	"github.com/rs/xid"
 	"flag"
+	"go.uber.org/ratelimit"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
@@ -75,7 +76,8 @@ func ScrapeFinancialData(uniqueID string, createdTime *time.Time, symbol string)
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 {
-		log.Fatalf("status code error: %d %s", res.StatusCode, res.Status)
+		log.Printf("status code error: %d %s", res.StatusCode, res.Status)
+		return nil;
 	}
 
 	// Load the HTML document
@@ -122,10 +124,15 @@ func main() {
 
 	boolPtr := flag.Bool("save", true, "save to database")
 	flag.Parse()
+
+	rl := ratelimit.New(2) // limit to 2 reqs/sec
 	for _, symbol := range flag.Args() {
+		rl.Take()
 		financialDataSummary := ScrapeFinancialData(guid.String(), &now, symbol)
 		if *boolPtr {
-			db.Create(financialDataSummary)
+			if(financialDataSummary != nil) {
+				db.Create(financialDataSummary)
+			}
 		} else {
 			fmt.Println(financialDataSummary)
 		}
