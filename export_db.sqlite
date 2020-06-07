@@ -2,6 +2,6 @@
 */
 .separator "|"
 .headers on
-.output sanjay-30may2020.csv
+.output sanjay-06jun2020.csv
 select created_at, unique_id, symbol, company_name, cash_to_debt, altman_z_score, operating_margin, net_margin, pe_ratio, forward_pe_ratio, peg_ratio, pb_ratio, stock_price, altman_z_score/pe_ratio as ztp, altman_z_score/peg_ratio as ztpeg, (altman_z_score/pe_ratio+altman_z_score/peg_ratio)/2 as cg_score from financial_summaries where pe_ratio !=0 and peg_ratio != 0 order by cg_score desc;
 .quit

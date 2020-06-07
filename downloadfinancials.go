@@ -1,18 +1,20 @@
 package main
 
 import (
+	"errors"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
-	"github.com/rs/xid"
-	"flag"
-	"go.uber.org/ratelimit"
+
 	"github.com/PuerkitoBio/goquery"
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
+	"github.com/rs/xid"
+	"go.uber.org/ratelimit"
 )
 
 func FieldToQueryMap() (queryMap map[string]string) {
@@ -32,28 +34,44 @@ func FieldToQueryMap() (queryMap map[string]string) {
 	return
 }
 
-func GetValues(doc *goquery.Document) (values map[string]string) {
-	values = make(map[string]string)
+// GetValues returns a map of values
+func GetValues(doc *goquery.Document) (*map[string]string, error) {
+	values := make(map[string]string)
 	for key, value := range FieldToQueryMap() {
 		s := doc.Find(value).First()
 		fieldValue := strings.TrimSpace(s.Text())
 		if key == "Company Name" {
-			fieldValue = strings.TrimSpace(strings.Split(fieldValue, "$")[0])
+			cName := strings.Split(fieldValue, "$")
+			if len(cName) == 0 {
+				return nil, errors.New("Empty Company Name")
+			}
+			fieldValue = strings.TrimSpace(cName[0])
 			//fmt.Println("Splitting...", fieldValue)
 		} else if key == "Current Stock Price" {
-			fieldValue = strings.TrimSpace(strings.Split(fieldValue, "$")[1])
-			fieldValue = strings.TrimSpace(strings.Split(fieldValue, " ")[0])
+			//fieldValue = strings.TrimSpace(strings.Split(fieldValue, "$")[1])
+			//fmt.Println("Current Price: ", fieldValue)
+			sPrice := strings.Split(fieldValue, "$")
+			//fmt.Println("sPrice: ", sPrice[1])
+			if len(sPrice) < 2 {
+				return nil, errors.New("Invalid Stock Price")
+			}
+			sp2 := strings.Split(strings.TrimSpace(sPrice[1]), " ")
+			if len(sp2) == 0 {
+				return nil, errors.New("Invalid stock price, error parsing")
+			}
+			fieldValue = strings.TrimSpace(sp2[0])
 		}
 		log.Printf("Name [%s] Value [%s]\n", key, fieldValue)
 		values[key] = fieldValue
 	}
-	return
+	return &values, nil
 }
 
+// FinancialSummary data
 type FinancialSummary struct {
 	gorm.Model
-	UniqueId string `gorm:"primary_key"`
-	Symbol          string 
+	UniqueID        string `gorm:"primary_key"`
+	Symbol          string
 	CreatedTime     *time.Time
 	CompanyName     string
 	CashToDebt      float64 `gorm:"not null;type:decimal(10,2)"`
@@ -63,51 +81,62 @@ type FinancialSummary struct {
 	PeRatio         float64 `gorm:"not null;type:decimal(10,2)"`
 	ForwardPeRatio  float64 `gorm:"not null;type:decimal(10,2)"`
 	PegRatio        float64 `gorm:"not null;type:decimal(10,2)"`
-	PbRatio float64 `gorm:"not null;type:decimal(10,2)"`
+	PbRatio         float64 `gorm:"not null;type:decimal(10,2)"`
 	StockPrice      float64 `gorm:"not null;type:decimal(10,2)"`
 	Industry        string
 }
 
-func ScrapeFinancialData(uniqueID string, createdTime *time.Time, symbol string) *FinancialSummary {
+// ScrapeFinancialData for details
+func ScrapeFinancialData(uniqueID string, createdTime *time.Time, symbol string) (*FinancialSummary, error) {
 	// Request the HTML page.
 	res, err := http.Get("https://www.gurufocus.com/stock/" + symbol + "/summary")
 	if err != nil {
 		log.Fatal(err)
+		return nil, err
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 {
 		log.Printf("status code error: %d %s", res.StatusCode, res.Status)
-		return nil;
+		return nil, errors.New("error: status non 200")
 	}
 
 	// Load the HTML document
 	doc, err := goquery.NewDocumentFromReader(res.Body)
 	if err != nil {
 		log.Fatal(err)
+		return nil, err
 	}
 
-	financialData := GetValues(doc)
+	financialDataPtr, err := GetValues(doc)
+	financialData := *financialDataPtr
+	if err != nil {
+		log.Fatal(err)
+		return nil, err
+	}
 
 	myParseFloat := func(s string) float64 {
-		v, _ := strconv.ParseFloat(s, 32)
+		v, err := strconv.ParseFloat(s, 32)
+		if err != nil {
+			return 0
+		}
 		return v
 	}
 	return &FinancialSummary{
-		UniqueId: uniqueID,
+		UniqueID:        uniqueID,
 		CreatedTime:     createdTime,
 		Symbol:          symbol,
 		CompanyName:     financialData["Company Name"],
-		CashToDebt:      myParseFloat(financialData["Cash-To-Debt"]),
+		CashToDebt:      myParseFloat((financialData)["Cash-To-Debt"]),
 		AltmanZScore:    myParseFloat(financialData["Altman Z-Score"]),
-		OperatingMargin: myParseFloat(financialData["Operating Margin %"])/100,
-		NetMargin:       myParseFloat(financialData["Net Margin %"])/100,
+		OperatingMargin: myParseFloat(financialData["Operating Margin %"]) / 100,
+		NetMargin:       myParseFloat(financialData["Net Margin %"]) / 100,
 		PeRatio:         myParseFloat(financialData["PE Ratio"]),
 		ForwardPeRatio:  myParseFloat(financialData["Forward PE Ratio"]),
 		PegRatio:        myParseFloat(financialData["PEG Ratio"]),
-		PbRatio: myParseFloat(financialData["PB Ratio"]),
+		PbRatio:         myParseFloat(financialData["PB Ratio"]),
 		StockPrice:      myParseFloat(financialData["Current Stock Price"]),
 		Industry:        financialData["Industry"],
-	}
+	}, nil
 }
 
 func main() {
@@ -128,15 +157,17 @@ func main() {
 	rl := ratelimit.New(2) // limit to 2 reqs/sec
 	for _, symbol := range flag.Args() {
 		rl.Take()
-		financialDataSummary := ScrapeFinancialData(guid.String(), &now, symbol)
+		financialDataSummary, err := ScrapeFinancialData(guid.String(), &now, symbol)
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
 		if *boolPtr {
-			if(financialDataSummary != nil) {
+			if financialDataSummary != nil {
 				db.Create(financialDataSummary)
 			}
 		} else {
 			fmt.Println(financialDataSummary)
 		}
 	}
-
-
 }
